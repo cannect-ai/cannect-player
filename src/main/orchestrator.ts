@@ -40,6 +40,7 @@ export class Orchestrator {
   private billable = new BillableTracker()
   private pollTimer: NodeJS.Timeout | null = null
   private lastQueueKey = ''
+  private lastUpdate: PlaylistUpdate | null = null
   /** videoId → QueueItem из последнего плейлиста, чтобы обогащать события report'ом. */
   private items = new Map<string, QueueItem>()
   /** Файл с последним реальным плейлистом (переживает перезапуск при простое бэкенда). */
@@ -148,6 +149,7 @@ export class Orchestrator {
     }))
 
     const update: PlaylistUpdate = { entries, operating, timezone, isDefault }
+    this.lastUpdate = update
 
     // Шлём в renderer только если плейлист реально изменился (или это первый раз).
     const key = JSON.stringify([isDefault, ...entries.map((e) => [e.videoId, e.localUrl])])
@@ -156,6 +158,21 @@ export class Orchestrator {
       this.send(update)
       log('info', `playlist updated: ${entries.length} item(s), default=${isDefault}, operating=${operating}`)
     }
+  }
+
+  /**
+   * Повторно отдать renderer'у то, что уже известно.
+   *
+   * Плейлист уходит только при изменении, поэтому окно, подключившееся позже
+   * первой отправки, не получит его никогда и застынет на "загрузка
+   * плейлиста…". Так и случилось на ALM-002. Тот же путь проходит окно после
+   * перезагрузки, которой мы теперь лечим падение рендерера, — без этого
+   * лечение оборачивалось бы вечным чёрным экраном.
+   */
+  resendPlaylist(): void {
+    if (!this.lastUpdate) return
+    log('info', 'повторная отправка плейлиста в окно')
+    this.send(this.lastUpdate)
   }
 
   private send(update: PlaylistUpdate): void {
