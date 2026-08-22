@@ -83,7 +83,7 @@ export function getConfig(): AppConfig {
     stationId: env('STATION_ID', ''), // без дефолта — пусто = станция не настроена
     stationToken: env('STATION_TOKEN', ''),
     apiBase: env('API_BASE', 'https://cannect.kz'),
-    cameraBase: env('CAMERA_BASE', 'http://127.0.0.1:8080'),
+    cameraBase: env('CAMERA_BASE', 'http://127.0.0.1:8081'),
     cameraDir: env('CAMERA_DIR', '/opt/cannect/cv-analytics'), // прод-расположение камеры (systemd)
     cameraService: env('CAMERA_SERVICE', 'cv-analytics'),
     cacheDir: env('CACHE_DIR', join(app.getPath('userData'), 'videos-cache')),

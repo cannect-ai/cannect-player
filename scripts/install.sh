@@ -92,7 +92,7 @@ if systemctl list-unit-files "$CAMERA_SERVICE.service" --no-legend 2>/dev/null |
 else
   echo "⚠️  Сервис $CAMERA_SERVICE НЕ установлен — его ставит установщик cannect-camera."
   echo "    Без него камера не поднимется при загрузке. Плеер всё равно стартует:"
-  echo "    launcher подождёт :8080 до 30с и пойдёт играть (без CV-атрибуции)."
+  echo "    launcher подождёт :8081 до 30с и пойдёт играть (без CV-атрибуции)."
 fi
 
 # --- 5. NOPASSWD sudoers для рестарта камеры из плеера ------------------------

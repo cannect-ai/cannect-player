@@ -54,9 +54,31 @@ function createWindow(): BrowserWindow {
   })
 
   w.once('ready-to-show', () => w.show())
-  w.webContents.on('render-process-gone', (_e, details) =>
-    log('error', `renderer gone: ${details.reason}`)
-  )
+
+  // Падение рендерера — это чёрный экран, который снаружи не виден: главный
+  // процесс, GPU и сеть остаются живы, станция отвечает на пинги и числится
+  // онлайн. На ALM-007 так простояли три с половиной часа, пока не заметили
+  // глазами. Поэтому окно поднимаем сами.
+  //
+  // Задержка растёт от секунды до минуты: если рендерер валится сразу после
+  // загрузки (битый ролик, нехватка памяти), перезапуск в цикле без паузы
+  // только добьёт машину.
+  let crashes = 0
+  w.webContents.on('render-process-gone', (_e, details) => {
+    crashes += 1
+    const delayMs = Math.min(60_000, 1000 * 2 ** (crashes - 1))
+    log('error', `renderer gone: ${details.reason} (падение №${crashes}), перезагрузка через ${delayMs / 1000}с`)
+    setTimeout(() => {
+      if (w.isDestroyed()) return
+      log('info', 'перезагружаю окно после падения рендерера')
+      w.reload()
+    }, delayMs)
+  })
+  // Успешная загрузка — значит прошлое падение пережито, счётчик обнуляем.
+  w.webContents.on('did-finish-load', () => {
+    if (crashes > 0) log('info', `рендерер восстановлен после ${crashes} падения(й)`)
+    crashes = 0
+  })
 
   if (process.env['ELECTRON_RENDERER_URL']) {
     void w.loadURL(process.env['ELECTRON_RENDERER_URL'])
