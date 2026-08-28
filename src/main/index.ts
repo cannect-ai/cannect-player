@@ -40,6 +40,10 @@ function createWindow(): BrowserWindow {
     fullscreen: !windowed,
     kiosk: !windowed,
     frame: windowed,
+    // Экран банки продан рекламодателю: любое чужое окно поверх плеера — это
+    // оплаченный показ, которого не было. Терминал, браузер, диалог обновления
+    // системы — всё это перекрывало борт на ALM-009, пока не заметили глазами.
+    alwaysOnTop: !windowed,
     width: windowed ? 960 : undefined,
     height: windowed ? 540 : undefined,
     autoHideMenuBar: true,
@@ -54,6 +58,33 @@ function createWindow(): BrowserWindow {
   })
 
   w.once('ready-to-show', () => w.show())
+
+  if (!windowed) {
+    // Одного флага при создании мало: менеджер окон сбрасывает «поверх всех»,
+    // когда поверх поднимается другое приложение, а kiosk слетает при выходе
+    // из полноэкранного режима. Поэтому состояние подтверждаем: сразу при
+    // потере фокуса и фоновым тиком — на случай, если окно перекрыли, ни разу
+    // не забрав фокус (уведомления, диалоги системы).
+    //
+    // 'screen-saver' — самый высокий уровень, который Electron умеет; на X11 он
+    // кладёт окно выше обычных и выше панелей.
+    const stayOnTop = (): void => {
+      if (w.isDestroyed()) return
+      if (!w.isAlwaysOnTop()) w.setAlwaysOnTop(true, 'screen-saver')
+      if (!w.isFullScreen()) w.setFullScreen(true)
+      w.moveTop()
+    }
+
+    w.on('blur', stayOnTop)
+    w.on('leave-full-screen', stayOnTop)
+
+    // Фокус НЕ забираем: борт должен быть виден, но станция должна оставаться
+    // администрируемой с её же клавиатуры. moveTop поднимает окно, не воруя
+    // ввод, — иначе на боксе невозможно работать, а Ctrl+Q останется
+    // единственным выходом.
+    const topWatchdog = setInterval(stayOnTop, 5_000)
+    w.on('closed', () => clearInterval(topWatchdog))
+  }
 
   // Падение рендерера — это чёрный экран, который снаружи не виден: главный
   // процесс, GPU и сеть остаются живы, станция отвечает на пинги и числится
