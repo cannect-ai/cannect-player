@@ -8,28 +8,37 @@ import { app, BrowserWindow, globalShortcut, ipcMain, session } from 'electron'
 import { join } from 'path'
 import { getConfig, getRendererConfig, isProvisioned, persistIdentity } from './config'
 import { Orchestrator } from './orchestrator'
+import { EventOrchestrator } from './event'
+import { HybridOrchestrator } from './hybrid'
 import { cameraInstalled, detectCameras, restartCamera, writeCameraEnv } from './provisioning'
 import { setupAutoUpdate } from './updater'
 import { log } from './logger'
-import type { PlaybackEvent, ProvisionInput, ProvisionOutcome } from '@shared/types'
+import type { EventPlayback, PlaybackEvent, ProvisionInput, ProvisionOutcome } from '@shared/types'
 
 // --- Флаги до готовности app ---------------------------------------------
 // Автоплей со звуком без жеста пользователя.
 app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
+if (process.env['PLAYER_REHEARSAL_DIR'])
+  app.setPath('userData', process.env['PLAYER_REHEARSAL_DIR'])
 // На банке один экземпляр.
 if (!app.requestSingleInstanceLock()) app.quit()
 
 let win: BrowserWindow | null = null
-let orchestrator: Orchestrator | null = null
+let orchestrator: Orchestrator | EventOrchestrator | HybridOrchestrator | null = null
 let runtimeStarted = false
 
 /** Запустить боевой рантайм (опрос/кэш/плейбэк + автообновление). Идемпотентно. */
 async function startRuntime(): Promise<void> {
   if (runtimeStarted || !win) return
   runtimeStarted = true
-  orchestrator = new Orchestrator(win)
+  const config = getRendererConfig()
+  orchestrator = config.eventMode
+    ? config.eventQueueMode === 'cannect'
+      ? new HybridOrchestrator(win)
+      : new EventOrchestrator(win)
+    : new Orchestrator(win)
   await orchestrator.start()
-  setupAutoUpdate()
+  if (!getRendererConfig().eventMode) setupAutoUpdate()
   log('info', 'runtime запущен (станция настроена)')
 }
 
@@ -57,6 +66,10 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  if (process.env['PLAYER_MUTED'] === '1') w.webContents.setAudioMuted(true)
+  w.webContents.on('did-start-navigation', (_event, _url, inPlace, isMainFrame) => {
+    if (isMainFrame && !inPlace) orchestrator?.interruptPlayback()
+  })
   w.once('ready-to-show', () => w.show())
 
   if (!windowed) {
@@ -96,9 +109,13 @@ function createWindow(): BrowserWindow {
   // только добьёт машину.
   let crashes = 0
   w.webContents.on('render-process-gone', (_e, details) => {
+    orchestrator?.interruptPlayback('error')
     crashes += 1
     const delayMs = Math.min(60_000, 1000 * 2 ** (crashes - 1))
-    log('error', `renderer gone: ${details.reason} (падение №${crashes}), перезагрузка через ${delayMs / 1000}с`)
+    log(
+      'error',
+      `renderer gone: ${details.reason} (падение №${crashes}), перезагрузка через ${delayMs / 1000}с`
+    )
     setTimeout(() => {
       if (w.isDestroyed()) return
       log('info', 'перезагружаю окно после падения рендерера')
@@ -124,7 +141,20 @@ function createWindow(): BrowserWindow {
   return w
 }
 
+function eventTransport(): EventOrchestrator | null {
+  return orchestrator instanceof HybridOrchestrator
+    ? orchestrator.event
+    : orchestrator instanceof EventOrchestrator
+      ? orchestrator
+      : null
+}
+
 function registerIpc(): void {
+  ipcMain.handle('event:state', () => eventTransport()?.snapshot ?? null)
+  ipcMain.on('event:feedback-ack', (_event, id: number) =>
+    eventTransport()?.acknowledgeFeedback(id)
+  )
+  ipcMain.on('event:playback', (_event, ev: EventPlayback) => eventTransport()?.handleEvent(ev))
   ipcMain.handle('config:get', () => getRendererConfig())
 
   ipcMain.on('playback:event', (_e, ev: PlaybackEvent) => {
@@ -142,25 +172,28 @@ function registerIpc(): void {
     detectedCameras: detectCameras()
   }))
 
-  ipcMain.handle('provisioning:provision', async (_e, input: ProvisionInput): Promise<ProvisionOutcome> => {
-    persistIdentity(input.stationId, input.stationToken)
-    log('info', `станция настроена через мастер: ${input.stationId}`)
+  ipcMain.handle(
+    'provisioning:provision',
+    async (_e, input: ProvisionInput): Promise<ProvisionOutcome> => {
+      persistIdentity(input.stationId, input.stationToken)
+      log('info', `станция настроена через мастер: ${input.stationId}`)
 
-    let cameraEnv: ProvisionOutcome['cameraEnv']
-    let cameraRestart: ProvisionOutcome['cameraRestart']
-    if (cameraInstalled()) {
-      const res = writeCameraEnv({
-        stationId: input.stationId,
-        stationToken: input.stationToken,
-        cameraCount: input.cameraCount
-      })
-      cameraEnv = { ok: res.ok, reason: res.reason }
-      if (res.ok) cameraRestart = await restartCamera()
+      let cameraEnv: ProvisionOutcome['cameraEnv']
+      let cameraRestart: ProvisionOutcome['cameraRestart']
+      if (cameraInstalled()) {
+        const res = writeCameraEnv({
+          stationId: input.stationId,
+          stationToken: input.stationToken,
+          cameraCount: input.cameraCount
+        })
+        cameraEnv = { ok: res.ok, reason: res.reason }
+        if (res.ok) cameraRestart = await restartCamera()
+      }
+
+      await startRuntime() // поднять плейбэк сразу после настройки
+      return { ok: true, cameraEnv, cameraRestart }
     }
-
-    await startRuntime() // поднять плейбэк сразу после настройки
-    return { ok: true, cameraEnv, cameraRestart }
-  })
+  )
 }
 
 app.whenReady().then(async () => {
@@ -184,6 +217,16 @@ app.whenReady().then(async () => {
   } else {
     log('info', 'станция не настроена — renderer покажет мастер первого запуска')
   }
+})
+
+let quitting = false
+app.on('before-quit', (event) => {
+  if (quitting) return
+  quitting = true
+  event.preventDefault()
+  orchestrator?.stop()
+  // Give local terminal notifications a bounded chance to reach the camera.
+  setTimeout(() => app.quit(), 250)
 })
 
 app.on('will-quit', () => globalShortcut.unregisterAll())

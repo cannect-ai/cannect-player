@@ -1,3 +1,10 @@
+@font-face{font-family:CokeUnity;src:url('./event-assets/Coca-Cola-Unity.ttf') format('truetype');font-display:swap}
+.db-station-scene{position:absolute;inset:0;z-index:30;display:flex;background:#000}
+.db-station-panel{position:relative;flex:1;min-width:0;height:100%;overflow:hidden;container-type:inline-size}
+.db-station-panel video,.db-station-overlay{position:absolute;inset:0;width:100%;height:100%;object-fit:fill}
+.db-station-overlay{z-index:1;pointer-events:none}
+.db-station-name{position:absolute;z-index:2;top:25.1%;width:90%;left:5%;text-align:center;color:white;line-height:1.1;font-family:CokeUnity,Arial,sans-serif;white-space:nowrap;text-shadow:0 1px 4px #0004}
+.db-station-finish .db-station-name{top:11.2%}
 /* Полноэкранный чёрный фон банки. Без скроллов, без курсора. */
 * {
   margin: 0;
@@ -166,3 +173,70 @@ body {
   font: 16px/1.4 system-ui, sans-serif;
   background: #000;
 }
+
+/* Player-wide frame: all media and overlays sit between two half-dividers.
+   Insets preserve fractional widths, so even an odd divider closes exactly. */
+.player-frame-content{position:absolute;inset:0;overflow:hidden}
+.player-frame--portrait>.player-frame-content{inset-inline:calc(var(--player-divider,0px) / 2)}
+.event-stage .event-celebration,.event-stage .event-game-live{background:#000}
+.event-stage .event-feedback{gap:var(--player-divider,0px)}
+
+.event-celebration{position:absolute;inset:0;display:flex;background:#100921;z-index:5}.event-celebration-strip{position:relative;flex:1;min-width:0;overflow:hidden}.event-celebration-strip video{width:100%;height:100%;object-fit:cover}.event-winner{position:absolute;inset:0;padding:7vh 2vw 5vh;display:flex;flex-direction:column;align-items:center;text-align:center;color:white;background:linear-gradient(#13092385,transparent 40%,transparent 60%,#130923ee)}.event-winner>span{font-size:1.1vw;letter-spacing:.14em;font-weight:800}.event-winner h1{font-size:3.2vw;line-height:1.08;max-width:100%;overflow-wrap:anywhere;letter-spacing:-.04em;margin:3vh 0 0;text-shadow:0 3px 15px #100726}.event-winner>b{margin-top:auto;font-size:1.1vw;border-radius:30px;padding:1.5vh 1.5vw;background:#dfff49;color:#151022}.event-winner>p{font-size:1.05vw;margin:2vh 0 0}
+
+@font-face{font-family:SteppeInter;src:url('./event-assets/Inter.ttf') format('truetype');font-weight:100 900;font-display:swap}
+.event-winner{font-family:SteppeInter,Arial,sans-serif;color:#000;background:none;padding:5vh 2.8vw 5vh;align-items:stretch;text-align:left}
+.event-brands{display:flex;align-items:center;justify-content:space-between;gap:1vw}.event-brands img{width:44%;height:7vh;object-fit:contain;object-position:left center;filter:brightness(0)}
+.event-winner h1{font-size:3.1vw;line-height:.98;font-weight:900;letter-spacing:-.06em;text-shadow:none;margin:3vh 0 0;text-transform:uppercase}
+.event-winner>b{align-self:stretch;text-align:center;margin-top:auto;font-size:1.05vw;border:1px solid black;border-radius:0;background:#eeff51;padding:2vh .4vw;color:#000}
+.event-winner>p{font-size:1vw;font-weight:800;text-align:center;letter-spacing:-.02em;margin-top:2vh}
+
+.event-winner h1{font-size:min(2.55vw,5.5vh);letter-spacing:-.035em;margin-top:1.5vh}
+.event-audio-toggle{position:fixed;right:12px;top:12px;z-index:30;border:1px solid #000;background:#eeff51;color:#000;padding:10px 16px;border-radius:24px;font:700 13px Arial;cursor:pointer}
+.event-feedback{position:absolute;inset:0;z-index:8;display:flex;pointer-events:none}.feedback-strip{flex:1;position:relative;overflow:hidden}.feedback-ring{position:absolute;left:50%;top:52%;width:140px;height:140px;border:4px solid #eeff51;border-radius:50%;transform:translate(-50%,-50%);animation:feedback-ring .7s ease-out both}.feedback-badge{position:absolute;top:60%;left:50%;white-space:nowrap;transform:translate(-50%,-50%);font:900 3.5vw SteppeInter,Arial;background:#eeff51;color:black;border:2px solid black;border-radius:100px;padding:8px 24px;box-shadow:0 8px 0 #000;animation:feedback-pop .9s ease-out both}.feedback-miss .feedback-badge{background:#ff0e0d;color:white}.feedback-miss .feedback-ring{border-color:#ff0e0d}.feedback-win .feedback-badge{animation-duration:2.3s}.feedback-spark{position:absolute;left:50%;top:52%;width:12px;height:22px;background:var(--color);animation:feedback-spark .85s cubic-bezier(.1,.5,.4,1) both}.feedback-win .feedback-spark{animation-duration:1.8s}
+@keyframes feedback-ring{from{opacity:1;transform:translate(-50%,-50%) scale(.2)}to{opacity:0;transform:translate(-50%,-50%) scale(2.4)}}@keyframes feedback-pop{0%{opacity:0;transform:translate(-50%,-10%) scale(.5)}20%{opacity:1;transform:translate(-50%,-50%) scale(1.1)}40%,72%{opacity:1;transform:translate(-50%,-50%) scale(1)}100%{opacity:0;transform:translate(-50%,-120%) scale(.9)}}@keyframes feedback-spark{0%{opacity:1;transform:rotate(var(--angle)) translateY(0) scale(.3)}80%{opacity:1}100%{opacity:0;transform:rotate(var(--angle)) translateY(calc(var(--travel)*-1)) rotate(130deg) scale(.8)}}
+
+.event-tea-partner{flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:1.15vw;margin-top:1.7vh;background:#fff;padding:1.5vh .8vw}.event-tea-partner>span{font-size:min(.67vw,1.4vh);font-weight:800;letter-spacing:.07em}.event-tea-partner>img{display:block;width:30%;height:6vh;object-fit:contain}
+
+/* Each panel faces a different side of the LED cylinder. Quiet zone is in SVG. */
+.event-guest-qr{position:absolute;inset:0;display:flex;z-index:4;pointer-events:none;font-family:SteppeInter,Arial,sans-serif}
+.guest-qr-strip{flex:1;min-width:0;position:relative}
+.guest-qr-ticket{position:absolute;bottom:3vh;left:1.1vw;right:1.1vw;display:flex;align-items:center;gap:.6vw;background:#fff;color:#080808;border-top:.65vh solid #edff49;padding:1vh .55vw;box-shadow:0 .35vh 1.5vh #0004}
+.guest-qr-ticket>img{display:block;width:27.23vh;height:27.23vh;flex-shrink:0;image-rendering:pixelated}
+.guest-qr-ticket>div{min-width:0}.guest-qr-ticket span{display:block;font-size:min(.65vw,1.4vh);font-weight:800;letter-spacing:.04em;margin-bottom:.8vh}.guest-qr-ticket strong{display:block;font-size:min(1.27vw,2.5vh);font-weight:900;line-height:1.06;letter-spacing:-.025em}.guest-qr-ticket p{font-size:min(.98vw,1.95vh);font-weight:600;line-height:1.25;margin-top:1vh}
+
+/* Live game insert: same portrait composition repeated around the LED cylinder. */
+.event-game-live{position:absolute;inset:0;display:flex;z-index:4;background:#140d25}
+.event-game-strip{flex:1;min-width:0;position:relative;overflow:hidden}
+.event-game-strip>video{width:100%;height:100%;object-fit:cover}
+.game-live-copy{position:absolute;inset:0;padding:4vh 2vw;color:white;display:flex;flex-direction:column;background:linear-gradient(#08051d99,transparent 45%,#08051de0)}
+.game-live-copy .event-brands{position:static;display:flex;justify-content:space-between;gap:1vw}
+.game-live-copy .event-brands img{width:42%;height:5vh;object-fit:contain;filter:brightness(0) invert(1)}
+.game-live-label{margin-top:5vh;align-self:flex-start;padding:1vh .8vw;background:#eeff51;color:#111;font:800 1.5vh Inter,Arial,sans-serif;letter-spacing:.08em}
+.game-live-label i{display:inline-block;width:.8vh;height:.8vh;margin-right:.6vw;border-radius:50%;background:#ff100e;animation:game-live-pulse 1.5s ease-in-out infinite}
+.game-live-copy h1{font:850 clamp(22px,4.4vh,56px)/1.02 Inter,Arial,sans-serif;letter-spacing:-.045em;margin:2vh 0;overflow-wrap:anywhere;text-transform:uppercase}
+.game-live-footer{margin-top:auto;display:flex;flex-direction:column;align-items:flex-start;gap:2vh}
+.game-live-footer strong{font:850 4.2vh/.98 Inter,Arial,sans-serif;letter-spacing:-.035em}
+.game-live-footer>span{background:#ff76f2;color:#101010;padding:1vh .65vw;font:800 1.3vh Inter,Arial,sans-serif}
+.game-live-partner{display:flex;align-items:center;gap:.6vw;background:white;color:#1b0c2f;padding:.8vh .7vw}
+.game-live-partner img{height:5vh;max-width:45%;object-fit:contain}
+.game-live-partner span{font:800 1.15vh SteppeInter,Arial,sans-serif;letter-spacing:.05em}
+@keyframes game-live-pulse{50%{opacity:.35}}
+
+/* Approved gameplay memes: shared by the station and local preview. */
+.game-live-meme .event-game-strip{container-type:size}
+.game-live-meme .game-live-copy{padding:6cqw 7cqw;background:linear-gradient(#08051d66,transparent 32%,transparent 66%,#08051dc9)}
+.game-live-meme .event-brands{gap:4cqw}
+.game-live-meme .event-brands img{height:11cqw;width:43%}
+.game-live-meme .game-live-label{margin-top:8cqw;padding:1.9cqw 2.4cqw;font-size:2.7cqw}
+.game-live-meme .game-live-label i{width:1.4cqw;height:1.4cqw;margin-right:1.6cqw}
+.game-live-meme h1{font-size:8.2cqw;line-height:1.02;letter-spacing:-.025em;margin:3.7cqw 0;max-height:31cqw;overflow:hidden}
+.game-live-meme .game-live-footer{gap:3.5cqw}
+.game-live-meme .game-live-footer strong{font-size:7.1cqw;line-height:1.05;letter-spacing:-.025em}
+.game-live-meme .game-live-footer>span{font-size:2.45cqw;padding:2cqw;background:#eeff51}
+.game-live-meme .game-live-partner{gap:3cqw;padding:2cqw 2.5cqw}
+.game-live-meme .game-live-partner img{height:8cqw;max-width:none}
+.game-live-meme .game-live-partner span{font-size:2.05cqw;white-space:nowrap}
+
+/* The normal fleet deck keeps its queue position under the short campaign. */
+.event-stage--campaign { position: absolute; inset: 0; z-index: 10; }
+.event-stage--campaign.event-stage--idle { display: none; }

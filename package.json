@@ -1,6 +1,6 @@
 {
   "name": "cannect-player",
-  "version": "0.1.7",
+  "version": "0.1.9",
   "description": "Нативный Linux (Electron) плеер для cannect LED-вендинг банок",
   "main": "./out/main/index.js",
   "author": "cannect",
@@ -12,23 +12,29 @@
     "preview": "electron-vite preview",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
     "build:linux": "electron-vite build && electron-builder --linux",
-    "release": "electron-vite build && electron-builder --linux --publish always"
+    "release": "electron-vite build && electron-builder --linux --publish always",
+    "test": "vitest run"
   },
   "dependencies": {
     "dotenv": "^16.4.5",
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.3.9",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.3",
     "@types/node": "^20.14.0",
     "@types/react": "^18.3.3",
     "@types/react-dom": "^18.3.0",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "^4.3.1",
     "electron": "^31.3.0",
     "electron-builder": "^24.13.3",
     "electron-vite": "^2.3.0",
+    "jsdom": "^26.1.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "typescript": "^5.5.3",
-    "vite": "^5.3.4"
+    "vite": "^5.3.4",
+    "vitest": "^4.1.11"
   }
 }

@@ -1,0 +1,27 @@
+import { afterEach, expect, it, vi } from 'vitest'
+vi.mock('electron', () => ({ app: { getPath: () => '/tmp/cannect-config-test-unused' } }))
+vi.mock('dotenv', () => ({ config: vi.fn() }))
+afterEach(() => {
+  vi.unstubAllEnvs()
+  vi.resetModules()
+})
+it('ordinary fleet credentials remain mandatory with the default queue mode', async () => {
+  vi.stubEnv('STATION_ID', '')
+  vi.stubEnv('STATION_TOKEN', '')
+  vi.stubEnv('EVENT_QUEUE_MODE', 'cannect')
+  vi.stubEnv('EVENT_API_BASE', 'https://event.example.test')
+  vi.stubEnv('EVENT_PLAYER_KEY', 'test-secret')
+  const config = await import('../src/main/config')
+  expect(config.isProvisioned()).toBe(false)
+  expect(config.getRendererConfig()).toMatchObject({ eventMode: true, eventQueueMode: 'cannect' })
+  expect(JSON.stringify(config.getRendererConfig())).not.toContain('test-secret')
+})
+it('standalone event mode does not require an unrelated station identity', async () => {
+  vi.stubEnv('STATION_ID', '')
+  vi.stubEnv('STATION_TOKEN', '')
+  vi.stubEnv('EVENT_QUEUE_MODE', 'event')
+  vi.stubEnv('EVENT_API_BASE', 'https://event.example.test')
+  vi.stubEnv('EVENT_PLAYER_KEY', 'test-secret')
+  const config = await import('../src/main/config')
+  expect(config.isProvisioned()).toBe(true)
+})

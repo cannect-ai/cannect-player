@@ -1,0 +1,34 @@
+[
+  {
+    "gift_id": "gift-0",
+    "meme_id": "howling-cat"
+  },
+  {
+    "gift_id": "gift-1",
+    "meme_id": "happy-kitten"
+  },
+  {
+    "gift_id": "gift-2",
+    "meme_id": "strong-kitten"
+  },
+  {
+    "gift_id": "gift-3",
+    "meme_id": "cool-dog"
+  },
+  {
+    "gift_id": "gift-4",
+    "meme_id": "crocodile"
+  },
+  {
+    "gift_id": "501fc931ac8929372eb65768f2d54b9c",
+    "meme_id": "happy-kitten"
+  },
+  {
+    "gift_id": "abcdef0123456789abcdef0123456789",
+    "meme_id": "cool-dog"
+  },
+  {
+    "gift_id": "ffffffffffffffffffffffffffffffff",
+    "meme_id": "howling-cat"
+  }
+]

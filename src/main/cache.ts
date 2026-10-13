@@ -25,7 +25,7 @@ function hashUrl(url: string): string {
 
 function extFor(url: string): string {
   const ext = extname(new URL(url).pathname).toLowerCase()
-  return /^\.(mp4|webm|mkv|mov|m4v)$/.test(ext) ? ext : '.mp4'
+  return /^\.(mp4|webm|mkv|mov|m4v|png)$/.test(ext) ? ext : '.mp4'
 }
 
 export class VideoCache {

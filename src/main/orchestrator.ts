@@ -26,6 +26,7 @@ import { getConfig } from './config'
 import { DEFAULT_VIDEOS } from './defaults'
 import { log } from './logger'
 import type {
+  ClipStartEvent,
   PlaybackEvent,
   PlaybackEventType,
   PlaylistEntry,
@@ -39,10 +40,14 @@ export class Orchestrator {
   private cache = new VideoCache()
   private billable = new BillableTracker()
   private pollTimer: NodeJS.Timeout | null = null
+  private cameraTimer: NodeJS.Timeout | null = null
   private lastQueueKey = ''
   private lastUpdate: PlaylistUpdate | null = null
   /** videoId → QueueItem из последнего плейлиста, чтобы обогащать события report'ом. */
   private items = new Map<string, QueueItem>()
+  private activePlayback: { event: ClipStartEvent; item?: QueueItem; startedMono: number } | null =
+    null
+  private closedPlaybacks = new Set<string>()
   /** Файл с последним реальным плейлистом (переживает перезапуск при простое бэкенда). */
   private playlistFile = join(getConfig().cacheDir, 'last-playlist.json')
 
@@ -52,6 +57,7 @@ export class Orchestrator {
 
   async start(): Promise<void> {
     await this.cache.init()
+    this.cameraTimer = setInterval(() => this.reannounceCamera(), 5_000)
     // Дефолты всегда держим в кэше — крайний фолбэк, доступный даже офлайн с первого старта.
     void this.cache.prefetchAll(DEFAULT_VIDEOS.map((v) => v.videoUrl))
     await this.poll()
@@ -62,6 +68,9 @@ export class Orchestrator {
   stop(): void {
     if (this.pollTimer) clearInterval(this.pollTimer)
     this.pollTimer = null
+    if (this.cameraTimer) clearInterval(this.cameraTimer)
+    this.cameraTimer = null
+    this.interruptPlayback()
   }
 
   /** Сохранить последний реальный плейлист (для переживания перезапуска при простое бэкенда). */
@@ -101,7 +110,12 @@ export class Orchestrator {
           return { queue: r.queue, operating: r.operating, timezone: r.timezone, isDefault: false }
         }
         log('info', 'очередь пуста → дефолтные ролики')
-        return { queue: DEFAULT_VIDEOS, operating: r.operating, timezone: r.timezone, isDefault: true }
+        return {
+          queue: DEFAULT_VIDEOS,
+          operating: r.operating,
+          timezone: r.timezone,
+          isDefault: true
+        }
       },
       (err) => {
         log('error', `queue poll failed: ${(err as Error).message}`)
@@ -127,7 +141,7 @@ export class Orchestrator {
 
     // Запоминаем элементы для report по videoId.
     this.items.clear()
-    for (const it of queue) this.items.set(it.videoId, it)
+    for (const it of queue) this.items.set(this.placementKey(it), it)
 
     // Прогреваем нужные ролики.
     const urls = queue.map((q) => q.videoUrl)
@@ -152,11 +166,24 @@ export class Orchestrator {
     this.lastUpdate = update
 
     // Шлём в renderer только если плейлист реально изменился (или это первый раз).
-    const key = JSON.stringify([isDefault, ...entries.map((e) => [e.videoId, e.localUrl])])
+    const key = JSON.stringify([
+      isDefault,
+      ...entries.map((e) => [
+        e.videoId,
+        e.localUrl,
+        e.campaignId,
+        e.bookingId,
+        e.duration,
+        e.aspectRatio
+      ])
+    ])
     if (key !== this.lastQueueKey) {
       this.lastQueueKey = key
       this.send(update)
-      log('info', `playlist updated: ${entries.length} item(s), default=${isDefault}, operating=${operating}`)
+      log(
+        'info',
+        `playlist updated: ${entries.length} item(s), default=${isDefault}, operating=${operating}`
+      )
     }
   }
 
@@ -179,15 +206,73 @@ export class Orchestrator {
     if (!this.win.isDestroyed()) this.win.webContents.send('playlist:update', update)
   }
 
-  /** Событие плейбэка от renderer → fan-out. Вызывается из IPC-хендлера. */
-  handlePlaybackEvent(ev: PlaybackEvent): void {
-    if (ev.type === 'start') {
-      // Старт клипа: первый после загрузки → started, переход в цикле → changed.
-      const event: PlaybackEventType = ev.isFirst ? 'playback_started' : 'playback_changed'
+  private placementKey(item: Pick<QueueItem, 'videoId' | 'campaignId' | 'bookingId'>): string {
+    return JSON.stringify([item.videoId, item.campaignId, item.bookingId])
+  }
 
-      // 1) cannect-web /current-playback
-      void sendCurrentPlayback({
+  /** Recover attribution after a local camera restart. Same identity/start and
+   * duration: retrying cannot extend the camera receiver's original expiry. */
+  private reannounceCamera(): void {
+    const source = this.activePlayback?.event
+    if (!source || Date.now() >= Date.parse(source.startedAt) + source.expectedDuration * 1000)
+      return
+    notifyCamera({
+      event: 'playback_started',
+      playbackId: source.playbackId,
+      campaignId: source.campaignId,
+      bookingId: source.bookingId,
+      videoId: source.videoId,
+      isDefault: source.isDefault,
+      startedAt: source.startedAt,
+      expectedDuration: source.expectedDuration
+    })
+  }
+
+  /** Main survives renderer crashes/reloads; never leave its last ad active. */
+  interruptPlayback(reason: 'interrupted' | 'error' = 'interrupted'): void {
+    const active = this.activePlayback
+    if (!active) return
+    this.handlePlaybackEvent({
+      ...active.event,
+      type: 'end',
+      completed: false,
+      endReason: reason,
+      endedAt: new Date().toISOString(),
+      playedDurationSec: Math.max(0, (performance.now() - active.startedMono) / 1000)
+    })
+  }
+
+  /** One canonical session fans out to both sinks. A late end/duplicate IPC from
+   * an old deck cannot clear the new ad or create a second billable report. */
+  handlePlaybackEvent(ev: PlaybackEvent): void {
+    if (!ev || typeof ev.playbackId !== 'string' || !ev.playbackId || ev.playbackId.length > 128)
+      return
+    if (ev.type === 'start') {
+      if (
+        this.closedPlaybacks.has(ev.playbackId) ||
+        this.activePlayback?.event.playbackId === ev.playbackId
+      )
+        return
+      const started = Date.parse(ev.startedAt)
+      if (
+        !Number.isFinite(started) ||
+        started > Date.now() + 5_000 ||
+        !Number.isFinite(ev.expectedDuration) ||
+        ev.expectedDuration <= 0 ||
+        ev.expectedDuration > 86_400
+      )
+        return
+      if (this.activePlayback && started < Date.parse(this.activePlayback.event.startedAt)) return
+      this.interruptPlayback()
+      this.activePlayback = {
+        event: { ...ev },
+        item: this.items.get(this.placementKey(ev)),
+        startedMono: performance.now()
+      }
+      const event: PlaybackEventType = ev.isFirst ? 'playback_started' : 'playback_changed'
+      const payload = {
         event,
+        playbackId: ev.playbackId,
         campaignId: ev.campaignId,
         bookingId: ev.bookingId,
         videoId: ev.videoId,
@@ -195,34 +280,45 @@ export class Orchestrator {
         expectedDuration: ev.expectedDuration,
         isDefault: ev.isDefault,
         startedAt: ev.startedAt
-      })
-
-      // 2) Камера /current-ad (заглушку-дефолт не атрибутируем)
-      if (!ev.isDefault) {
-        notifyCamera({
-          event,
-          campaignId: ev.campaignId,
-          bookingId: ev.bookingId,
-          videoId: ev.videoId,
-          startedAt: ev.startedAt,
-          expectedDuration: ev.expectedDuration
-        })
       }
+      void sendCurrentPlayback(payload)
+      // Explicit defaults clear paid context immediately. Receivers also expire
+      // a lost terminal event at startedAt + expectedDuration.
+      notifyCamera(payload)
       return
     }
-
-    // ev.type === 'end' → report. Оплачиваемость считаем здесь (один register
-    // на показ): первые showsPerHour в часе billable, сверх — бонус-петля.
-    if (!ev.isDefault) {
-      const item = this.items.get(ev.videoId)
+    const active = this.activePlayback
+    if (ev.type !== 'end' || !active || active.event.playbackId !== ev.playbackId) return
+    this.activePlayback = null
+    this.closedPlaybacks.add(ev.playbackId)
+    if (this.closedPlaybacks.size > 256)
+      this.closedPlaybacks.delete(this.closedPlaybacks.values().next().value!)
+    const source = active.event
+    const payload = {
+      event: 'playback_ended' as const,
+      playbackId: source.playbackId,
+      campaignId: source.campaignId,
+      bookingId: source.bookingId,
+      videoId: source.videoId,
+      videoTitle: source.videoTitle,
+      expectedDuration: source.expectedDuration,
+      isDefault: source.isDefault,
+      startedAt: source.startedAt
+    }
+    void sendCurrentPlayback(payload)
+    notifyCamera(payload)
+    // /report counts bonus plays even for incomplete payloads. Only completed
+    // clips belong in billing; interruptions still clear both analytics sinks.
+    if (!source.isDefault && ev.completed) {
       void sendReport({
-        videoId: ev.videoId,
-        campaignId: ev.campaignId,
-        bookingId: ev.bookingId,
-        timestamp: ev.startedAt,
-        duration: ev.expectedDuration,
+        playbackId: source.playbackId,
+        videoId: source.videoId,
+        campaignId: source.campaignId,
+        bookingId: source.bookingId,
+        timestamp: source.startedAt,
+        duration: source.expectedDuration,
         completed: ev.completed,
-        billable: item ? this.billable.register(item, ev.startedAt) : true
+        billable: active.item ? this.billable.register(active.item, source.startedAt) : true
       })
     }
   }

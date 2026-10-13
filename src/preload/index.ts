@@ -13,6 +13,21 @@ import type {
 } from '@shared/types'
 
 const bridge: CannectBridge = {
+  onGameFeedback: (cb) => {
+    const listener = (_e: unknown, event: Parameters<typeof cb>[0]): void => {
+      cb(event)
+      ipcRenderer.send('event:feedback-ack', event.id)
+    }
+    ipcRenderer.on('event:feedback', listener)
+    return () => ipcRenderer.removeListener('event:feedback', listener)
+  },
+  getEventState: () => ipcRenderer.invoke('event:state'),
+  onEventState: (cb) => {
+    const listener = (_e: unknown, state: Parameters<typeof cb>[0]): void => cb(state)
+    ipcRenderer.on('event:update', listener)
+    return () => ipcRenderer.removeListener('event:update', listener)
+  },
+  sendEventPlayback: (ev) => ipcRenderer.send('event:playback', ev),
   getConfig: (): Promise<RendererConfig> => ipcRenderer.invoke('config:get'),
 
   onPlaylist: (cb: (playlist: PlaylistUpdate) => void): (() => void) => {

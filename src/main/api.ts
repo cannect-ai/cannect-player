@@ -44,6 +44,7 @@ export async function fetchQueue(): Promise<QueueResponse> {
 }
 
 export interface ReportPayload {
+  playbackId: string
   videoId: string
   campaignId?: string
   bookingId?: string
@@ -67,6 +68,7 @@ export async function sendReport(payload: ReportPayload): Promise<void> {
 }
 
 export interface CurrentPlaybackPayload {
+  playbackId: string
   event: 'playback_started' | 'playback_changed' | 'playback_ended'
   campaignId?: string
   bookingId?: string
