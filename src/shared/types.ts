@@ -2,7 +2,7 @@
 // Поля основаны на API cannect-web (см. CLAUDE.md) и камеры (current-ad).
 
 export type AspectRatio = '16:9' | '9:16'
-export type VideoSource = 'smb' | 'agency'
+export type VideoSource = 'smb' | 'agency' | 'event'
 
 /** Элемент плейлиста, как его отдаёт GET /api/stations/<id>/queue → data.queue[]. */
 export interface QueueItem {
@@ -43,6 +43,8 @@ export interface PlaylistUpdate {
 export type PlaybackEventType = 'playback_started' | 'playback_changed' | 'playback_ended'
 
 interface ClipRef {
+  /** Identity of one actual playback, shared by both sinks and its terminal. */
+  playbackId: string
   videoId: string
   videoTitle: string
   campaignId?: string
@@ -63,6 +65,9 @@ export interface ClipStartEvent extends ClipRef {
 export interface ClipEndEvent extends ClipRef {
   type: 'end'
   completed: boolean // доиграл до конца
+  endedAt: string
+  playedDurationSec: number
+  endReason: 'completed' | 'interrupted' | 'error'
 }
 
 /** Внутреннее событие renderer → main. */
@@ -94,7 +99,46 @@ export interface ProvisionOutcome {
 }
 
 /** API, доступное в renderer через preload (window.cannect). */
+export interface EventScene {
+  id: string
+  name: string
+  campaign?: string
+  language?: 'ru' | 'kk'
+  videoUrl?: string
+  overlayUrl?: string
+  localUrl?: string
+  localOverlayUrl?: string
+}
+export interface EventState {
+  campaign?: string
+  activeGame?: (EventScene & { seenAt: number }) | null
+  entries: PlaylistEntry[]
+  publicUrl: string
+  celebration: (EventScene & { entry: PlaylistEntry; expiresAt?: number }) | null
+}
+export type EventPlayback =
+  | { type: 'playing'; videoId: string; nextId: string | null; round: number; started: number }
+  | {
+      type: 'celebration'
+      id: string
+      action: 'started' | 'completed' | 'failed'
+      manualClose?: boolean
+    }
+export interface GameFeedback {
+  id: number
+  created: number
+  gameId: string
+  kind: 'start' | 'count' | 'move' | 'bounce' | 'catch' | 'miss' | 'win' | 'loss'
+  collected?: number
+  score: number
+  misses: number
+  lane: number
+}
 export interface CannectBridge {
+  onGameFeedback(cb: (event: GameFeedback) => void): () => void
+  getEventState(): Promise<EventState | null>
+  onEventState(cb: (state: EventState) => void): () => void
+  sendEventPlayback(ev: EventPlayback): void
   getConfig(): Promise<RendererConfig>
   onPlaylist(cb: (playlist: PlaylistUpdate) => void): () => void
   sendPlaybackEvent(ev: PlaybackEvent): void
@@ -106,6 +150,9 @@ export interface CannectBridge {
 
 /** Безопасный для renderer срез конфига (без секретов). */
 export interface RendererConfig {
+  muteAudio?: boolean
+  eventMode?: boolean
+  eventQueueMode?: 'cannect' | 'event'
   stationId: string
   stripDividerPx: number
   bufferGateSec: number

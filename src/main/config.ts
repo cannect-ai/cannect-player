@@ -36,6 +36,8 @@ function loadEnvSources(): void {
   if (existsSync(SYSTEM_ENV_PATH)) loadDotenv({ path: SYSTEM_ENV_PATH })
   const userPath = userStationEnvPath()
   if (existsSync(userPath)) loadDotenv({ path: userPath })
+  const eventPath = '/etc/cannect-player/event.env'
+  if (existsSync(eventPath)) loadDotenv({ path: eventPath })
   loadDotenv() // ./.env (dev) — не перетирает уже загруженное
   sourcesLoaded = true
 }
@@ -52,6 +54,10 @@ function envInt(key: string, fallback: number): number {
 }
 
 export interface AppConfig {
+  eventQueueMode: 'cannect' | 'event'
+  eventApiBase: string
+  eventPlayerKey: string
+  eventCacheDir: string
   /** MongoDB ObjectId станции в cannect-web. ДОЛЖЕН совпадать со STATION_ID камеры. Пусто = не настроено. */
   stationId: string
   /** Общий секрет станции — тот же, что в env камеры. Пусто = не настроено. */
@@ -80,6 +86,10 @@ export function getConfig(): AppConfig {
   if (cached) return cached
   loadEnvSources()
   cached = {
+    eventQueueMode: env('EVENT_QUEUE_MODE', 'cannect') === 'event' ? 'event' : 'cannect',
+    eventApiBase: env('EVENT_API_BASE', '').replace(/\/$/, ''),
+    eventPlayerKey: env('EVENT_PLAYER_KEY', ''),
+    eventCacheDir: env('EVENT_CACHE_DIR', join(app.getPath('userData'), 'alm002-campaign-cache')),
     stationId: env('STATION_ID', ''), // без дефолта — пусто = станция не настроена
     stationToken: env('STATION_TOKEN', ''),
     apiBase: env('API_BASE', 'https://cannect.kz'),
@@ -98,7 +108,9 @@ export function getConfig(): AppConfig {
 /** Настроена ли станция (есть и ID, и токен). Иначе показываем мастер первого запуска. */
 export function isProvisioned(): boolean {
   const c = getConfig()
-  return Boolean(c.stationId && c.stationToken)
+  return c.eventQueueMode === 'cannect'
+    ? Boolean(c.stationId && c.stationToken)
+    : Boolean(c.eventApiBase && c.eventPlayerKey)
 }
 
 /**
@@ -127,6 +139,8 @@ export function persistIdentity(stationId: string, stationToken: string): void {
 export function getRendererConfig(): RendererConfig {
   const c = getConfig()
   return {
+    eventMode: Boolean(c.eventApiBase && c.eventPlayerKey),
+    eventQueueMode: c.eventQueueMode,
     stationId: c.stationId,
     stripDividerPx: c.stripDividerPx,
     bufferGateSec: c.bufferGateSec

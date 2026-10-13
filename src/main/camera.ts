@@ -2,10 +2,10 @@
 // Плеер ТОЛЬКО уведомляет камеру о том, что играет сейчас — для атрибуции
 // CV-метрик к кампании. Аналитику камера шлёт на бэкенд сама.
 //
-// Контракт (см. cannect-camera src/server/api.py + auth.py):
-//   POST http://127.0.0.1:8080/current-ad
+// Контракт (см. cannect-camera app/player_context.py):
+//   POST http://127.0.0.1:8081/current-ad
 //   Header: X-Station-Token: <STATION_TOKEN>
-//   Body: { event, campaignId, videoId, startedAt, expectedDuration }
+//   Body: { event, playbackId, campaignId, bookingId, videoId, isDefault, startedAt, expectedDuration }
 //
 // Принцип: fire-and-forget. Камера может лежать/тормозить — это НИКОГДА
 // не должно блокировать или ронять плейбэк. Короткий таймаут, ошибки глотаем.
@@ -17,6 +17,8 @@ import type { PlaybackEventType } from '@shared/types'
 const TIMEOUT_MS = 2_000
 
 export interface CurrentAdPayload {
+  playbackId: string
+  isDefault: boolean
   event: PlaybackEventType
   campaignId?: string
   /** SMB-брони идут с bookingId (без campaignId). Камера ключует показ по тому, что не null. */

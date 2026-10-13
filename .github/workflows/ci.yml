@@ -1,0 +1,46 @@
+name: Player checks
+on:
+  push:
+    branches: [main, 'codex/**']
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: player-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test-build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Package Linux x64 (no publishing)
+        run: npx electron-builder --linux AppImage --x64 --publish never
+      - name: Install smoke runtime libraries
+        run: sudo apt-get update && sudo apt-get install -y xvfb libgtk-3-0 libgbm1 libasound2 libnss3
+      - name: Unprovisioned packaged smoke
+        shell: bash
+        run: |
+          export PLAYER_REHEARSAL_DIR="$(mktemp -d)"
+          export PLAYER_WINDOWED=1 PLAYER_MUTED=1 ELECTRON_ENABLE_LOGGING=1
+          set +e
+          timeout 15s xvfb-run -a dist/cannect-player-*.AppImage --appimage-extract-and-run --no-sandbox > /tmp/player-smoke.log 2>&1
+          result=$?
+          set -e
+          cat /tmp/player-smoke.log
+          test "$result" = 124
+          grep -q 'станция не настроена' /tmp/player-smoke.log
+          ! grep -E 'renderer gone|Cannot find module|SyntaxError|ReferenceError|Error \[ERR_' /tmp/player-smoke.log
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cannect-player-linux-x64
+          path: dist/*.AppImage
+          retention-days: 14
