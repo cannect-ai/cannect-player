@@ -83,7 +83,8 @@ export function Deck({
     failed.current = false
     clearRecovery()
     if (active && !paused) armRecovery()
-    videos.current.forEach((video, index) => {
+    const media = [...videos.current]
+    media.forEach((video, index) => {
       if (!video) return
       if (restarting) video.currentTime = 0
       if (active && !paused) {
@@ -97,6 +98,7 @@ export function Deck({
     return () => {
       cancelled = true
       clearRecovery()
+      media.forEach((video) => video?.pause())
     }
   }, [active, paused, src, restartOnResume])
 
